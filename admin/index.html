@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>X-Web3-earners — Admin</title>
+<style>
+  :root {
+    --bg: #1C1917;
+    --surface: #262321;
+    --surface-alt: #2C1E16;
+    --border: rgba(255,255,255,0.08);
+    --text: #FFFFFF;
+    --muted: #A89A8C;
+    --brand: #EA580C;
+    --brand-light: #F97316;
+    --gold: #FBBF24;
+    --success: #22C55E;
+    --destructive: #DC2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 14px; }
+
+  #login {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    margin-top: 24px;
+  }
+  #login input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text);
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  button {
+    background: var(--brand);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:active { transform: scale(0.98); }
+  button.secondary {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  button.success { background: var(--success); }
+  button.destructive { background: var(--destructive); }
+
+  #app { display: none; margin-top: 20px; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button {
+    background: var(--surface-alt);
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .tabs button.active { background: var(--brand); color: white; }
+
+  .row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .row .info { flex: 1; min-width: 200px; }
+  .row .name { font-weight: 600; font-size: 14px; }
+  .row .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .row .amount { font-weight: 700; font-size: 16px; }
+  .row .amount .usdt { color: var(--muted); font-weight: 400; font-size: 12px; display: block; }
+  .row .actions { display: flex; gap: 8px; }
+
+  .empty { color: var(--muted); text-align: center; padding: 40px 0; font-size: 14px; }
+  .warn {
+    background: rgba(251, 191, 36, 0.12);
+    color: var(--gold);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>X-Web3-earners</h1>
+  <p class="sub">Admin — withdrawal review</p>
+
+  <div id="login">
+    <div class="warn">
+      Change <code>ADMIN_TOKEN</code> in <code>backend/.env</code> before this ever leaves your machine.
+    </div>
+    <input id="apiUrl" placeholder="Backend URL" value="http://localhost:4000" />
+    <input id="token" placeholder="Admin token" type="password" />
+    <button onclick="login()">Log in</button>
+  </div>
+
+  <div id="app">
+    <div class="tabs">
+      <button class="active" data-status="pending" onclick="switchTab('pending')">Pending</button>
+      <button data-status="approved" onclick="switchTab('approved')">Approved</button>
+      <button data-status="paid" onclick="switchTab('paid')">Paid</button>
+      <button data-status="rejected" onclick="switchTab('rejected')">Rejected</button>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+  let apiUrl = "";
+  let token = "";
+  let currentStatus = "pending";
+
+  function login() {
+    apiUrl = document.getElementById("apiUrl").value.replace(/\/$/, "");
+    token = document.getElementById("token").value;
+    if (!apiUrl || !token) return alert("Enter both fields");
+    document.getElementById("login").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    localStorage.setItem("xwe_admin", JSON.stringify({ apiUrl, token }));
+    loadList();
+  }
+
+  function switchTab(status) {
+    currentStatus = status;
+    document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("active"));
+    document.querySelector(\`.tabs button[data-status="\${status}"]\`).classList.add("active");
+    loadList();
+  }
+
+  async function loadList() {
+    const list = document.getElementById("list");
+    list.innerHTML = "<div class='empty'>Loading…</div>";
+    try {
+      const res = await fetch(\`\${apiUrl}/api/admin/withdrawals?status=\${currentStatus}\`, {
+        headers: { "X-Admin-Token": token },
+      });
+      if (!res.ok) throw new Error("Invalid token or backend unreachable");
+      const rows = await res.json();
+
+      if (rows.length === 0) {
+        list.innerHTML = "<div class='empty'>Nothing here.</div>";
+        return;
+      }
+
+      list.innerHTML = rows
+        .map(
+          (r) => \`
+        <div class="row">
+          <div class="info">
+            <div class="name">\${r.first_name}\${r.username ? " (@" + r.username + ")" : ""}</div>
+            <div class="meta">Telegram ID: \${r.telegram_id} · \${new Date(r.created_at).toLocaleString()}</div>
+          </div>
+          <div class="amount">
+            \${r.amount_shib.toLocaleString()} SHIB
+            <span class="usdt">≈ $\${r.amount_usdt.toFixed(4)} USDT</span>
+          </div>
+          \${
+            currentStatus === "pending"
+              ? \`<div class="actions">
+                  <button class="success" onclick="act(\${r.id}, 'approve')">Approve</button>
+                  <button class="destructive" onclick="act(\${r.id}, 'reject')">Reject</button>
+                </div>\`
+              : currentStatus === "approved"
+              ? \`<div class="actions">
+                  <button class="success" onclick="act(\${r.id}, 'paid')">Mark Paid</button>
+                </div>\`
+              : ""
+          }
+        </div>\`
+        )
+        .join("");
+    } catch (e) {
+      list.innerHTML = \`<div class='empty'>\${e.message}</div>\`;
+    }
+  }
+
+  async function act(id, action) {
+    if (action === "reject" && !confirm("Reject this withdrawal? The SHIB will be refunded to the user.")) return;
+    await fetch(\`\${apiUrl}/api/admin/withdrawals/\${id}/\${action}\`, {
+      method: "POST",
+      headers: { "X-Admin-Token": token, "Content-Type": "application/json" },
+    });
+    loadList();
+  }
+
+  // Restore saved session
+  const saved = localStorage.getItem("xwe_admin");
+  if (saved) {
+    const { apiUrl: savedUrl, token: savedToken } = JSON.parse(saved);
+    document.getElementById("apiUrl").value = savedUrl;
+    document.getElementById("token").value = savedToken;
+  }
+</script>
+</body>
+</html>
