@@ -1,6 +1,15 @@
--- X-Web3-earners — Supabase schema + seed
--- Paste this whole file into: Supabase Dashboard → SQL Editor → New query → Run
--- Safe to run more than once (CREATE TABLE IF NOT EXISTS).
+-- ============================================================
+-- X-Web3-earners — complete database setup for Supabase
+-- ============================================================
+-- HOW TO RUN:
+--   1. Open your project at supabase.com
+--   2. Left sidebar → SQL Editor → "New query"
+--   3. Paste this ENTIRE file into the editor
+--   4. Click Run  → you should see "Success. No rows returned"
+--
+-- Safe to run more than once: tables are only created if missing,
+-- and the 5 starter tasks are only inserted when tasks is empty.
+-- ============================================================
 
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
