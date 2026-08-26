@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { Request, Response, NextFunction } from "express";
-import { db } from "../db";
+import { queryOne } from "../db";
 
 export interface AuthedRequest extends Request {
   userId?: number;
@@ -18,7 +18,7 @@ let warnedNoToken = false;
  * dev user is created/reused — this NEVER runs in that mode once BOT_TOKEN
  * is set, so don't deploy without setting it.
  */
-export function verifyTelegram(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function verifyTelegram(req: AuthedRequest, res: Response, next: NextFunction) {
   const initData = req.header("X-Telegram-Init-Data") || "";
 
   if (!BOT_TOKEN) {
@@ -33,7 +33,7 @@ export function verifyTelegram(req: AuthedRequest, res: Response, next: NextFunc
       first_name: "Dev",
       username: "dev_user",
     };
-    req.userId = upsertUser(devUser.id, devUser.first_name, devUser.username);
+    req.userId = await upsertUser(devUser.id, devUser.first_name, devUser.username);
     return next();
   }
 
@@ -65,7 +65,7 @@ export function verifyTelegram(req: AuthedRequest, res: Response, next: NextFunc
     return res.status(401).json({ error: "No user in init data" });
   }
 
-  req.userId = upsertUser(user.id, user.first_name, user.username);
+  req.userId = await upsertUser(user.id, user.first_name, user.username);
   next();
 }
 
@@ -80,18 +80,17 @@ function parseUserUnsafe(initData: string) {
   }
 }
 
-function upsertUser(telegramId: number, firstName: string, username?: string): number {
-  const existing = db
-    .prepare("SELECT id FROM users WHERE telegram_id = ?")
-    .get(telegramId) as { id: number } | undefined;
-
+async function upsertUser(telegramId: number, firstName: string, username?: string): Promise<number> {
+  const existing = await queryOne<{ id: number }>(
+    "SELECT id FROM users WHERE telegram_id = $1",
+    [telegramId]
+  );
   if (existing) return existing.id;
 
-  const result = db
-    .prepare(
-      "INSERT INTO users (telegram_id, first_name, username) VALUES (?, ?, ?)"
-    )
-    .run(telegramId, firstName, username ?? null);
+  const inserted = await queryOne<{ id: number }>(
+    "INSERT INTO users (telegram_id, first_name, username) VALUES ($1, $2, $3) RETURNING id",
+    [telegramId, firstName, username ?? null]
+  );
 
-  return result.lastInsertRowid as number;
+  return inserted!.id;
 }

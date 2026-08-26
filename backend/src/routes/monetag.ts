@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../db";
+import { query } from "../db";
 
 export const monetagRouter = Router();
 
@@ -23,12 +23,13 @@ export const monetagRouter = Router();
  * Right now this endpoint logs the event and does NOT credit any balance —
  * intentionally, so nothing pays out until real verification is wired in.
  */
-monetagRouter.post("/monetag/postback", (req, res) => {
+monetagRouter.post("/monetag/postback", async (req, res) => {
   const { click_id, user_id, task_id } = req.query;
 
-  db.prepare(
-    "INSERT INTO ad_events (user_id, task_id, monetag_click_id, status) VALUES (?, ?, ?, 'pending')"
-  ).run(Number(user_id) || null, Number(task_id) || null, String(click_id ?? ""));
+  await query(
+    "INSERT INTO ad_events (user_id, task_id, monetag_click_id, status) VALUES ($1, $2, $3, 'pending')",
+    [Number(user_id) || null, Number(task_id) || null, String(click_id ?? "")]
+  );
 
   console.warn(
     "[monetag] Postback received but NOT verified or credited — implement signature check first.",

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../db";
+import { query, queryOne, withTransaction } from "../db";
 import { getShibRate } from "../rates";
 
 export const adminRouter = Router();
@@ -20,48 +20,50 @@ adminRouter.use("/admin", (req, res, next) => {
 
 adminRouter.get("/admin/withdrawals", async (req, res) => {
   const status = (req.query.status as string) || "pending";
-  const rows = db
-    .prepare(
-      `SELECT w.id, w.amount_shib, w.status, w.created_at, u.telegram_id, u.username, u.first_name
-       FROM withdrawals w JOIN users u ON u.id = w.user_id
-       WHERE w.status = ?
-       ORDER BY w.created_at ASC`
-    )
-    .all(status) as any[];
+  const rows = await query<any>(
+    `SELECT w.id, w.amount_shib, w.status, w.created_at, u.telegram_id, u.username, u.first_name
+     FROM withdrawals w JOIN users u ON u.id = w.user_id
+     WHERE w.status = $1
+     ORDER BY w.created_at ASC`,
+    [status]
+  );
 
   const { rate } = await getShibRate();
 
   res.json(rows.map((r) => ({ ...r, amount_usdt: r.amount_shib * rate })));
 });
 
-adminRouter.post("/admin/withdrawals/:id/approve", (req, res) => {
-  db.prepare(
-    "UPDATE withdrawals SET status = 'approved', updated_at = datetime('now') WHERE id = ?"
-  ).run(req.params.id);
+adminRouter.post("/admin/withdrawals/:id/approve", async (req, res) => {
+  await query("UPDATE withdrawals SET status = 'approved', updated_at = now() WHERE id = $1", [
+    req.params.id,
+  ]);
   res.sendStatus(200);
 });
 
-adminRouter.post("/admin/withdrawals/:id/paid", (req, res) => {
-  db.prepare(
-    "UPDATE withdrawals SET status = 'paid', updated_at = datetime('now') WHERE id = ?"
-  ).run(req.params.id);
+adminRouter.post("/admin/withdrawals/:id/paid", async (req, res) => {
+  await query("UPDATE withdrawals SET status = 'paid', updated_at = now() WHERE id = $1", [
+    req.params.id,
+  ]);
   res.sendStatus(200);
 });
 
-adminRouter.post("/admin/withdrawals/:id/reject", (req, res) => {
+adminRouter.post("/admin/withdrawals/:id/reject", async (req, res) => {
   const { note } = req.body as { note?: string };
-  const withdrawal = db.prepare("SELECT * FROM withdrawals WHERE id = ?").get(req.params.id) as any;
+  const withdrawal = await queryOne<any>("SELECT * FROM withdrawals WHERE id = $1", [
+    req.params.id,
+  ]);
 
-  db.transaction(() => {
-    db.prepare(
-      "UPDATE withdrawals SET status = 'rejected', admin_note = ?, updated_at = datetime('now') WHERE id = ?"
-    ).run(note ?? null, req.params.id);
-    // Refund the balance since it was deducted at request time.
-    db.prepare("UPDATE users SET balance_shib = balance_shib + ? WHERE id = ?").run(
-      withdrawal.amount_shib,
-      withdrawal.user_id
+  await withTransaction(async (tx) => {
+    await tx.query(
+      "UPDATE withdrawals SET status = 'rejected', admin_note = $1, updated_at = now() WHERE id = $2",
+      [note ?? null, req.params.id]
     );
-  })();
+    // Refund the balance since it was deducted at request time.
+    await tx.query("UPDATE users SET balance_shib = balance_shib + $1 WHERE id = $2", [
+      withdrawal.amount_shib,
+      withdrawal.user_id,
+    ]);
+  });
 
   res.sendStatus(200);
 });

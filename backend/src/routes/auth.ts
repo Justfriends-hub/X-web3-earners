@@ -1,15 +1,16 @@
 import { Router } from "express";
-import { db } from "../db";
+import { queryOne } from "../db";
 import { AuthedRequest } from "../middleware/verifyTelegram";
 
 export const authRouter = Router();
 
-authRouter.post("/me", (req: AuthedRequest, res) => {
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.userId) as any;
+authRouter.post("/me", async (req: AuthedRequest, res) => {
+  const user = await queryOne<any>("SELECT * FROM users WHERE id = $1", [req.userId]);
 
-  const tasksCompleted = db
-    .prepare("SELECT COUNT(*) as c FROM task_claims WHERE user_id = ?")
-    .get(req.userId) as { c: number };
+  const tasksCompleted = (await queryOne<{ c: number }>(
+    "SELECT COUNT(*)::int AS c FROM task_claims WHERE user_id = $1",
+    [req.userId]
+  ))!;
 
   res.json({
     id: user.id,

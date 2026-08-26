@@ -1,16 +1,17 @@
 import { Router } from "express";
-import { db } from "../db";
+import { query, queryOne, withTransaction } from "../db";
 import { AuthedRequest } from "../middleware/verifyTelegram";
 
 export const tasksRouter = Router();
 
 const CHECKIN_REWARDS = [10, 15, 20, 30, 40, 50, 100];
 
-tasksRouter.get("/tasks", (req: AuthedRequest, res) => {
-  const tasks = db.prepare("SELECT * FROM tasks WHERE active = 1").all() as any[];
-  const userClaims = db
-    .prepare("SELECT task_id FROM task_claims WHERE user_id = ?")
-    .all(req.userId) as { task_id: number }[];
+tasksRouter.get("/tasks", async (req: AuthedRequest, res) => {
+  const tasks = await query<any>("SELECT * FROM tasks WHERE active = TRUE");
+  const userClaims = await query<{ task_id: number }>(
+    "SELECT task_id FROM task_claims WHERE user_id = $1",
+    [req.userId]
+  );
   const claimedTaskIds = new Set(userClaims.map((c) => c.task_id));
 
   const result = tasks.map((t) => {
@@ -36,9 +37,12 @@ tasksRouter.get("/tasks", (req: AuthedRequest, res) => {
   res.json(result);
 });
 
-tasksRouter.post("/tasks/:id/claim", (req: AuthedRequest, res) => {
+tasksRouter.post("/tasks/:id/claim", async (req: AuthedRequest, res) => {
   const taskId = Number(req.params.id);
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND active = 1").get(taskId) as any;
+  const task = await queryOne<any>(
+    "SELECT * FROM tasks WHERE id = $1 AND active = TRUE",
+    [taskId]
+  );
 
   if (!task) return res.status(404).json({ error: "Task not found" });
   if (task.completed_count >= task.total_slots) {
@@ -46,9 +50,10 @@ tasksRouter.post("/tasks/:id/claim", (req: AuthedRequest, res) => {
   }
 
   if (task.category === "offer") {
-    const already = db
-      .prepare("SELECT id FROM task_claims WHERE user_id = ? AND task_id = ?")
-      .get(req.userId, taskId);
+    const already = await queryOne(
+      "SELECT id FROM task_claims WHERE user_id = $1 AND task_id = $2",
+      [req.userId, taskId]
+    );
     if (already) return res.status(400).json({ error: "Already completed" });
   }
 
@@ -57,26 +62,25 @@ tasksRouter.post("/tasks/:id/claim", (req: AuthedRequest, res) => {
   // S2S postback (see routes/monetag.ts) once ad completion is verified
   // server-to-server. This direct-claim endpoint is a placeholder so the
   // UI is testable before Monetag credentials exist.
-  const claim = db.transaction(() => {
-    db.prepare(
-      "INSERT INTO task_claims (user_id, task_id, reward_shib) VALUES (?, ?, ?)"
-    ).run(req.userId, taskId, task.reward_shib);
-    db.prepare("UPDATE tasks SET completed_count = completed_count + 1 WHERE id = ?").run(taskId);
-    db.prepare("UPDATE users SET balance_shib = balance_shib + ? WHERE id = ?").run(
-      task.reward_shib,
-      req.userId
+  const updated = await withTransaction(async (tx) => {
+    await tx.query(
+      "INSERT INTO task_claims (user_id, task_id, reward_shib) VALUES ($1, $2, $3)",
+      [req.userId, taskId, task.reward_shib]
     );
-    return db.prepare("SELECT balance_shib FROM users WHERE id = ?").get(req.userId) as {
-      balance_shib: number;
-    };
+    await tx.query("UPDATE tasks SET completed_count = completed_count + 1 WHERE id = $1", [
+      taskId,
+    ]);
+    return (await tx.queryOne<{ balance_shib: number }>(
+      "UPDATE users SET balance_shib = balance_shib + $1 WHERE id = $2 RETURNING balance_shib",
+      [task.reward_shib, req.userId]
+    ))!;
   });
 
-  const updated = claim();
   res.json({ balance_shib: updated.balance_shib });
 });
 
-tasksRouter.post("/checkin", (req: AuthedRequest, res) => {
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.userId) as any;
+tasksRouter.post("/checkin", async (req: AuthedRequest, res) => {
+  const user = await queryOne<any>("SELECT * FROM users WHERE id = $1", [req.userId]);
   const today = new Date().toISOString().slice(0, 10);
 
   if (user.last_checkin_date === today) {
@@ -88,13 +92,13 @@ tasksRouter.post("/checkin", (req: AuthedRequest, res) => {
   const newStreak = streakContinues ? Math.min(user.streak + 1, 7) : 1;
   const reward = CHECKIN_REWARDS[newStreak - 1];
 
-  db.prepare(
-    "UPDATE users SET streak = ?, last_checkin_date = ?, balance_shib = balance_shib + ? WHERE id = ?"
-  ).run(newStreak, today, reward, req.userId);
+  const updated = await queryOne<{ streak: number; balance_shib: number }>(
+    `UPDATE users
+     SET streak = $1, last_checkin_date = $2, balance_shib = balance_shib + $3
+     WHERE id = $4
+     RETURNING streak, balance_shib`,
+    [newStreak, today, reward, req.userId]
+  );
 
-  const updated = db.prepare("SELECT balance_shib FROM users WHERE id = ?").get(req.userId) as {
-    balance_shib: number;
-  };
-
-  res.json({ streak: newStreak, balance_shib: updated.balance_shib });
+  res.json({ streak: updated!.streak, balance_shib: updated!.balance_shib });
 });

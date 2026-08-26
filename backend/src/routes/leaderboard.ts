@@ -1,17 +1,16 @@
 import { Router } from "express";
-import { db } from "../db";
+import { query } from "../db";
 
 export const leaderboardRouter = Router();
 
-leaderboardRouter.get("/leaderboard", (req, res) => {
+leaderboardRouter.get("/leaderboard", async (req, res) => {
   const type = req.query.type === "earners" ? "earners" : "referrals";
 
+  // Whitelisted column names only — never interpolate raw user input into SQL.
   const column = type === "earners" ? "balance_shib" : "referrals";
-  const rows = db
-    .prepare(
-      `SELECT username, first_name, ${column} as value FROM users ORDER BY ${column} DESC LIMIT 20`
-    )
-    .all() as { username: string | null; first_name: string; value: number }[];
+  const rows = await query<{ username: string | null; first_name: string; value: number }>(
+    `SELECT username, first_name, ${column} AS value FROM users ORDER BY ${column} DESC LIMIT 20`
+  );
 
   const result = rows
     .filter((r) => r.value > 0)
