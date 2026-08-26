@@ -6,4 +6,7 @@ dist/
 *.db-shm
 backend.log
 frontend.log
+push.log
+supabase/.temp/
+.vercel/
 .DS_Store

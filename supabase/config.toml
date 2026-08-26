@@ -1,0 +1,6 @@
+project_id = "x-web3-earners"
+
+# Our API authenticates users via Telegram initData HMAC, not Supabase JWTs,
+# so the built-in Authorization-header check must be off.
+[functions.server]
+verify_jwt = false
