@@ -1,6 +1,9 @@
 import { getInitData } from "./telegram";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+// Empty string = same origin (works when the backend serves this app itself,
+// which is how production deploys run). For local standalone dev, frontend/.env
+// sets VITE_API_URL=http://localhost:4000.
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
