@@ -103,11 +103,22 @@ export default function Account({
 
       <div>
         <h2 className="text-text-primary font-semibold mb-3">Leaderboard</h2>
-        <div className="space-y-2">
-          {leaderboard.map((row) => (
-            <LeaderboardRow key={row.rank} {...row} />
-          ))}
-        </div>
+        {leaderboard.some((r) => r.value >= 100) ? (
+          <div className="space-y-2">
+            {leaderboard
+              .filter((r) => r.value >= 100)
+              .map((row) => (
+                <LeaderboardRow key={row.rank} {...row} />
+              ))}
+          </div>
+        ) : (
+          <div className="rounded-card bg-surface border border-border p-8 text-center space-y-2">
+            <div className="text-text-primary font-semibold">Leaderboard — Coming Soon</div>
+            <p className="text-text-muted text-sm">
+              The board unlocks once a user reaches 100 referrals.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

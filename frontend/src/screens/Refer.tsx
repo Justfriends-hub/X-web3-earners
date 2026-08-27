@@ -144,9 +144,18 @@ export default function Refer({ me, rate, referralLink, leaderboard }: Props) {
         </div>
 
         <div className="space-y-2">
-          {leaderboard.map((row) => (
-            <LeaderboardRow key={row.rank} {...row} />
-          ))}
+          {leaderboard.some((r) => r.value >= 100) ? (
+            leaderboard
+              .filter((r) => r.value >= 100)
+              .map((row) => <LeaderboardRow key={row.rank} {...row} />)
+          ) : (
+            <div className="rounded-card bg-surface border border-border p-8 text-center space-y-2">
+              <div className="text-text-primary font-semibold">Leaderboard — Coming Soon</div>
+              <p className="text-text-muted text-sm">
+                The board unlocks once a user reaches 100 referrals. Keep inviting!
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
