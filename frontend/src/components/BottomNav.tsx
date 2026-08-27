@@ -45,8 +45,8 @@ export default function BottomNav({ active, onChange }: Props) {
           z-index: 50;
         }
         .liquid-navigation {
-          --primary-bg: #11101d;
-          --body-bg: #84878f;
+          --primary-bg: #262321;
+          --body-bg: #1C1917;
           position: relative;
           width: 400px;
           max-width: 100%;
@@ -56,7 +56,8 @@ export default function BottomNav({ active, onChange }: Props) {
           justify-content: center;
           align-items: center;
           border-radius: 10px;
-          box-shadow: 0 15px 25px rgba(0,0,0,0.2);
+          box-shadow: 0 15px 25px rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.08);
           pointer-events: auto;
         }
         .liquid-navigation ul {
@@ -97,8 +98,8 @@ export default function BottomNav({ active, onChange }: Props) {
           color: #fff;
         }
         .liquid-navigation ul li.active a .icon {
-          transform: translateY(-32px);
-          color: var(--primary-bg);
+          transform: translateY(-28px);
+          color: #fff;
         }
         .liquid-navigation ul li a .text {
           position: absolute;
@@ -119,13 +120,14 @@ export default function BottomNav({ active, onChange }: Props) {
         .liquid-indicator {
           position: absolute;
           top: -50%;
-          width: 70px;
-          height: 70px;
-          background: #fff;
+          width: 56px;
+          height: 56px;
+          background: #EA580C;
           border-radius: 50%;
-          border: 6px solid var(--body-bg);
+          border: 5px solid var(--body-bg);
           transition: 0.5s;
           pointer-events: none;
+          box-shadow: 0 4px 12px rgba(234,88,12,0.4);
         }
         .liquid-indicator::before {
           content: '';

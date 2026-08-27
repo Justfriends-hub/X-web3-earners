@@ -46,13 +46,14 @@ export default function App() {
       setLeaderboard(leaderboardData);
       setUsingMock(false);
     } catch {
-      // Backend not running — fall back to mock data so the UI is still
-      // browsable during local frontend-only development.
+      // Outside Telegram (or backend down) — show preview data.
+      // In production with BOT_TOKEN set, opening outside Telegram always
+      // hits this branch and shows the Coming Soon leaderboard correctly.
       const user = getTelegramUser();
       setMe({ ...mockMe, first_name: user.first_name, telegram_id: user.id, username: user.username ?? null });
       setRate(mockRate);
       setTasks(mockTasks);
-      setLeaderboard(mockLeaderboard);
+      setLeaderboard([]);
       setUsingMock(true);
     }
   }
@@ -115,7 +116,7 @@ export default function App() {
     <div className="min-h-[100dvh] bg-background">
       {usingMock && (
         <div className="bg-gold/20 text-gold text-xs text-center py-1.5 safe-top">
-          Backend not connected — showing mock data
+          Preview mode — open in Telegram for live data
         </div>
       )}
 
