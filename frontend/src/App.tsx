@@ -7,7 +7,7 @@ import Play from "./screens/Play";
 import Refer from "./screens/Refer";
 import Account from "./screens/Account";
 import { api, Me, RateInfo, Task } from "./lib/api";
-import { initTelegram, getTelegramUser } from "./lib/telegram";
+import { initTelegram, getTelegramUser, getReferralCode } from "./lib/telegram";
 import { mockMe, mockRate, mockTasks, mockLeaderboard } from "./lib/mockData";
 
 const MIN_WITHDRAW_SHIB = 5000; // placeholder threshold — tune once real economics are set
@@ -17,7 +17,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [rate, setRate] = useState<RateInfo | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [leaderboard, setLeaderboard] = useState(mockLeaderboard);
+  const [leaderboard, setLeaderboard] = useState<{ rank: number; username: string; value: number }[]>([]);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [usingMock, setUsingMock] = useState(false);
 
@@ -28,14 +28,22 @@ export default function App() {
 
   async function loadAll() {
     try {
-      const [meData, rateData, taskData] = await Promise.all([
-        api.getMe(),
+      const referralCode = getReferralCode();
+      if (referralCode) {
+        try { localStorage.setItem("xwe_ref", referralCode); } catch {}
+      }
+      const storedRef = referralCode || (() => { try { return localStorage.getItem("xwe_ref"); } catch { return null; } })();
+
+      const [meData, rateData, taskData, leaderboardData] = await Promise.all([
+        api.getMe(storedRef),
         api.getRate(),
         api.getTasks(),
+        api.getLeaderboard("referrals").catch(() => [] as { rank: number; username: string; value: number }[]),
       ]);
       setMe(meData);
       setRate(rateData);
       setTasks(taskData);
+      setLeaderboard(leaderboardData);
       setUsingMock(false);
     } catch {
       // Backend not running — fall back to mock data so the UI is still
@@ -44,6 +52,7 @@ export default function App() {
       setMe({ ...mockMe, first_name: user.first_name, telegram_id: user.id, username: user.username ?? null });
       setRate(mockRate);
       setTasks(mockTasks);
+      setLeaderboard(mockLeaderboard);
       setUsingMock(true);
     }
   }

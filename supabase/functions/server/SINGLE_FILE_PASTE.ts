@@ -22,7 +22,7 @@ class HttpError extends Error {
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Admin-Token",
+  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Referral-Code, X-Admin-Token",
 };
 
 function json(data: unknown, status = 200): Response {
@@ -79,22 +79,37 @@ function parseUserUnsafe(initData: string): TgUser | null {
     return raw ? (JSON.parse(raw) as TgUser) : null;
   } catch { return null; }
 }
-async function upsertUser(user: TgUser): Promise<number> {
-  const existing = await sql<{ id: number }>`SELECT id FROM users WHERE telegram_id = ${user.id} LIMIT 1`;
+async function upsertUser(user: TgUser, referralCode?: string | null): Promise<number> {
+  const existing = await sql<{ id: number; referred_by: number | null }>`SELECT id, referred_by FROM users WHERE telegram_id = ${user.id} LIMIT 1`;
   if (existing.length > 0) return existing[0].id;
-  const inserted = await sql<{ id: number }>`
-    INSERT INTO users (telegram_id, first_name, username)
-    VALUES (${user.id}, ${user.first_name}, ${user.username ?? null}) RETURNING id`;
+  let referredById: number | null = null;
+  if (referralCode && referralCode.startsWith("ref_")) {
+    const refTelegramId = Number(referralCode.slice(4));
+    if (!isNaN(refTelegramId) && refTelegramId !== user.id) {
+      const referrer = await sql<{ id: number }>`SELECT id FROM users WHERE telegram_id = ${refTelegramId} LIMIT 1`;
+      if (referrer.length > 0) referredById = referrer[0].id;
+    }
+  }
+  if (referredById !== null) {
+    const inserted = await sql.begin(async (tx) => {
+      const newUser = await tx<{ id: number }>`INSERT INTO users (telegram_id, first_name, username, referred_by) VALUES (${user.id}, ${user.first_name}, ${user.username ?? null}, ${referredById}) RETURNING id`;
+      await tx`UPDATE users SET referrals = referrals + 1, balance_shib = balance_shib + 2500 WHERE id = ${referredById}`;
+      return newUser[0];
+    });
+    return inserted.id;
+  }
+  const inserted = await sql<{ id: number }>`INSERT INTO users (telegram_id, first_name, username) VALUES (${user.id}, ${user.first_name}, ${user.username ?? null}) RETURNING id`;
   return inserted[0].id;
 }
 let warnedNoToken = false;
 async function getUserIdFromRequest(req: Request): Promise<number> {
   const initData = req.headers.get("x-telegram-init-data") ?? "";
+  const referralCode = req.headers.get("x-referral-code") ?? new URL(req.url).searchParams.get("startapp") ?? new URL(req.url).searchParams.get("referral_code");
   const botToken = Deno.env.get("BOT_TOKEN") ?? "";
   if (!botToken) {
     if (!warnedNoToken) { console.warn("[telegram] BOT_TOKEN not set — UNVERIFIED dev mode."); warnedNoToken = true; }
     const devUser = parseUserUnsafe(initData) ?? { id: 999999999, first_name: "Dev", username: "dev_user" };
-    return upsertUser(devUser);
+    return upsertUser(devUser, referralCode);
   }
   if (!initData) throw new HttpError(401, "Missing Telegram init data");
   const params = new URLSearchParams(initData);
@@ -105,7 +120,7 @@ async function getUserIdFromRequest(req: Request): Promise<number> {
   if (computedHash !== hash) throw new HttpError(401, "Invalid Telegram init data");
   const user = parseUserUnsafe(initData);
   if (!user) throw new HttpError(401, "No user in init data");
-  return upsertUser(user);
+  return upsertUser(user, referralCode);
 }
 
 // ------------------------------------------------------------ handlers ---

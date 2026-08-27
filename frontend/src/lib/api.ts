@@ -51,7 +51,12 @@ export interface RateInfo {
 }
 
 export const api = {
-  getMe: () => request<Me>("/api/auth/me", { method: "POST" }),
+  getMe: (referralCode?: string | null) =>
+    request<Me>("/api/auth/me", {
+      method: "POST",
+      headers: referralCode ? { "X-Referral-Code": referralCode } : {},
+      body: referralCode ? JSON.stringify({ referral_code: referralCode }) : undefined,
+    }),
   getRate: () => request<RateInfo>("/api/rate"),
   getTasks: () => request<Task[]>("/api/tasks"),
   claimTask: (taskId: number) =>

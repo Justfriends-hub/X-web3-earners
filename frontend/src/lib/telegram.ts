@@ -61,3 +61,19 @@ export function getInitData(): string {
 export function isRunningInTelegram(): boolean {
   return isTelegramEnv;
 }
+
+export function getReferralCode(): string | null {
+  const webApp = getTelegramWebApp();
+  const startParam = (webApp as any)?.initDataUnsafe?.start_param as string | undefined;
+  if (startParam && startParam.startsWith("ref_")) return startParam;
+
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const param =
+      params.get("startapp") ??
+      params.get("tgWebAppStartParam") ??
+      params.get("start_param");
+    if (param && param.startsWith("ref_")) return param;
+  }
+  return null;
+}

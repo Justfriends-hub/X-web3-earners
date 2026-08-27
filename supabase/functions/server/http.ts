@@ -16,7 +16,7 @@ export class HttpError extends Error {
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Admin-Token",
+  "Access-Control-Allow-Headers": "Content-Type, X-Telegram-Init-Data, X-Referral-Code, X-Admin-Token",
 };
 
 export function json(data: unknown, status = 200): Response {
