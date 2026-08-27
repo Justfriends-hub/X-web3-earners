@@ -18,6 +18,17 @@ export default function TaskCard({ task, onClaim }: Props) {
     if (task.status !== "available" || loading) return;
     setLoading(true);
     try {
+      const adUrl = (task as any).url || (isAdTask ? "https://omg10.com/4/11018116" : null);
+      if (adUrl) {
+        const webApp = (window as any).Telegram?.WebApp;
+        if (webApp?.openLink) {
+          try { webApp.openLink(adUrl); } catch { window.open(adUrl, "_blank"); }
+        } else {
+          window.open(adUrl, "_blank");
+        }
+        // brief pause so the link registers before we credit
+        await new Promise((r) => setTimeout(r, 600));
+      }
       await onClaim(task.id);
     } finally {
       setLoading(false);

@@ -165,7 +165,7 @@ async function listTasks(userId: number): Promise<Response> {
     const claimedByUser = claimedTaskIds.has(t.id);
     let status: "available" | "completed" | "exhausted" = "available";
     if (t.category === "offer" && claimedByUser) status = "completed"; else if (exhausted) status = "exhausted";
-    return { id: t.id, title: t.title, category: t.category, badge: t.badge, reward_shib: t.reward_shib, completed_count: t.completed_count, total_slots: t.total_slots, status };
+    return { id: t.id, title: t.title, category: t.category, badge: t.badge, reward_shib: t.reward_shib, completed_count: t.completed_count, total_slots: t.total_slots, status, url: t.url || "https://omg10.com/4/11018116" };
   });
   return json(result);
 }

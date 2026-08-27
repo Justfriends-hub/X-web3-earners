@@ -36,8 +36,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   reward_shib DOUBLE PRECISION NOT NULL DEFAULT 0.3,
   total_slots INTEGER NOT NULL DEFAULT 1,
   completed_count INTEGER NOT NULL DEFAULT 0,
-  active BOOLEAN NOT NULL DEFAULT TRUE
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  url TEXT
 );
+
+-- For existing deployments (add url column for monetag/omg links):
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS url TEXT;
+UPDATE tasks SET url = 'https://omg10.com/4/11018116' WHERE url IS NULL;
 
 CREATE TABLE IF NOT EXISTS task_claims (
   id BIGSERIAL PRIMARY KEY,
@@ -67,12 +72,12 @@ CREATE TABLE IF NOT EXISTS withdrawals (
 );
 
 -- Seed the starter tasks once.
-INSERT INTO tasks (title, category, badge, reward_shib, total_slots)
+INSERT INTO tasks (title, category, badge, reward_shib, total_slots, url)
 SELECT * FROM (VALUES
-  ('Watch Ad #1',        'ad',    'HOT',     0.3, 20),
-  ('Special Ad Task #1', 'ad',    'SPECIAL', 0.3, 10),
-  ('Join our Discord',   'offer', NULL,      0.3, 1),
-  ('Follow on YouTube',  'offer', NULL,      0.3, 1),
-  ('Complete partner offer', 'offer', 'LIMITED', 0.3, 1)
-) AS seed(title, category, badge, reward_shib, total_slots)
+  ('Watch Ad #1',        'ad',    'HOT',     0.3, 20, 'https://omg10.com/4/11018116'),
+  ('Special Ad Task #1', 'ad',    'SPECIAL', 0.3, 10, 'https://omg10.com/4/11018116'),
+  ('Join our Discord',   'offer', NULL,      0.3, 1,  'https://omg10.com/4/11018116'),
+  ('Follow on YouTube',  'offer', NULL,      0.3, 1,  'https://omg10.com/4/11018116'),
+  ('Complete partner offer', 'offer', 'LIMITED', 0.3, 1,  'https://omg10.com/4/11018116')
+) AS seed(title, category, badge, reward_shib, total_slots, url)
 WHERE NOT EXISTS (SELECT 1 FROM tasks);

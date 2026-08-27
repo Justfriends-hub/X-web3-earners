@@ -43,6 +43,7 @@ export interface Task {
   completed_count: number;
   total_slots: number;
   status: "available" | "completed" | "exhausted";
+  url?: string | null;
 }
 
 export interface RateInfo {

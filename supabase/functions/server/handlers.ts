@@ -81,6 +81,7 @@ export async function listTasks(userId: number): Promise<Response> {
       completed_count: t.completed_count,
       total_slots: t.total_slots,
       status,
+      url: t.url || "https://omg10.com/4/11018116",
     };
   });
 
