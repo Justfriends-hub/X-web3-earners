@@ -228,6 +228,14 @@ async function isUserInChannel(telegramId: number): Promise<boolean> {
   const botToken = Deno.env.get("BOT_TOKEN");
   if (!botToken) return false;
   const rawChannel = Deno.env.get("CHANNEL_ID") ?? Deno.env.get("REQUIRED_CHANNEL") ?? CHANNEL_URL;
+  const isInviteLink = rawChannel.includes("t.me/+");
+  if (isInviteLink && !rawChannel.match(/^-100/)) {
+    const numericChannel = Deno.env.get("CHANNEL_ID");
+    if (!numericChannel || !numericChannel.startsWith("-100")) {
+      console.warn("[channel] Invite link used as chat_id — cannot verify via getChatMember without numeric ID. Allowing claim. Set CHANNEL_ID=-100... for strict verification. User:", telegramId);
+      return true;
+    }
+  }
   const candidates = [rawChannel];
   if (rawChannel.includes("t.me/+")) {
     const hash = rawChannel.split("+")[1];
@@ -244,8 +252,16 @@ async function isUserInChannel(telegramId: number): Promise<boolean> {
         return false;
       }
       if (data.description && String(data.description).includes("chat not found")) continue;
+      if (isInviteLink && data.description) {
+        console.warn("[channel] getChatMember failed for invite link, allowing claim:", data.description);
+        return true;
+      }
       return false;
     } catch { continue; }
+  }
+  if (isInviteLink) {
+    console.warn("[channel] All candidates failed for invite link, allowing claim for user:", telegramId);
+    return true;
   }
   return false;
 }

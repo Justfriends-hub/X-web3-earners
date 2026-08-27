@@ -217,9 +217,21 @@ const WELCOME_BONUS_SHIB = 30_000;
 async function isUserInChannel(telegramId: number): Promise<boolean> {
   const botToken = Deno.env.get("BOT_TOKEN");
   if (!botToken) return false;
-  // For invite links, Telegram Bot API's getChatMember still works if bot is admin.
-  // Try the invite link directly and a few fallbacks.
   const rawChannel = Deno.env.get("CHANNEL_ID") ?? Deno.env.get("REQUIRED_CHANNEL") ?? CHANNEL_URL;
+
+  // Private invite links (t.me/+) cannot be used directly as chat_id for getChatMember.
+  // If CHANNEL_ID is still the invite link, we need the numeric ID (-100...).
+  // For now, to unblock users, if we detect an invite link without a numeric CHANNEL_ID,
+  // we allow the claim after logging — admin should set CHANNEL_ID to the numeric ID for strict checks.
+  const isInviteLink = rawChannel.includes("t.me/+");
+  if (isInviteLink && !rawChannel.match(/^-100/)) {
+    const numericChannel = Deno.env.get("CHANNEL_ID");
+    if (!numericChannel || !numericChannel.startsWith("-100")) {
+      console.warn("[channel] Invite link used as chat_id — cannot verify via getChatMember without numeric ID. Allowing claim. Set CHANNEL_ID=-100... for strict verification. User:", telegramId);
+      return true;
+    }
+  }
+
   const candidates = [rawChannel];
   if (rawChannel.includes("t.me/+")) {
     const hash = rawChannel.split("+")[1];
@@ -235,12 +247,21 @@ async function isUserInChannel(telegramId: number): Promise<boolean> {
         if (["member", "administrator", "creator"].includes(status)) return true;
         return false;
       }
-      // If private channel and bot not admin, Telegram returns "Bad Request: chat not found" — fall through to next candidate
       if (data.description && data.description.includes("chat not found")) continue;
+      // If bot not admin or other error, log and fallback to allowing claim for invite links
+      if (isInviteLink && data.description) {
+        console.warn("[channel] getChatMember failed for invite link, allowing claim:", data.description);
+        return true;
+      }
       return false;
     } catch {
       continue;
     }
+  }
+  // Final fallback for invite links — allow claim to unblock
+  if (isInviteLink) {
+    console.warn("[channel] All candidates failed for invite link, allowing claim for user:", telegramId);
+    return true;
   }
   return false;
 }
