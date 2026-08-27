@@ -76,6 +76,10 @@ export const api = {
     request<{ rank: number; username: string; value: number }[]>(
       `/api/leaderboard?type=${type}`
     ),
+  getChannelStatus: () =>
+    request<{ joined: boolean; claimed: boolean; channelUrl: string }>("/api/channel/status"),
+  claimWelcome: () =>
+    request<{ balance_shib: number; claimed: boolean }>("/api/channel/claim", { method: "POST" }),
 };
 
 export { API_URL };

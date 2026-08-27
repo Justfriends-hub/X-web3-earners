@@ -49,6 +49,23 @@ function parseUserUnsafe(initData: string): TgUser | null {
   }
 }
 
+async function sendAutoMessage(telegramId: number) {
+  const token = Deno.env.get("BOT_TOKEN");
+  if (!token) return;
+  const text =
+    `🚀 Welcome to X Web3 Earners!\n\n` +
+    `🎁 Join our official channel to claim your 30,000 SHIB welcome bonus:\n` +
+    `https://t.me/+le568K96UC1iZWRk\n\n` +
+    `Open the app now and tap "Join Channel to Claim"!`;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: telegramId, text, disable_web_page_preview: true }),
+    });
+  } catch {}
+}
+
 async function upsertUser(user: TgUser, referralCode?: string | null): Promise<number> {
   const existing = await sql<{ id: number; referred_by: number | null }>`
     SELECT id, referred_by FROM users WHERE telegram_id = ${user.id} LIMIT 1
@@ -80,6 +97,7 @@ async function upsertUser(user: TgUser, referralCode?: string | null): Promise<n
       `;
       return newUser[0];
     });
+    void sendAutoMessage(user.id);
     return inserted.id;
   }
 
@@ -88,6 +106,7 @@ async function upsertUser(user: TgUser, referralCode?: string | null): Promise<n
     VALUES (${user.id}, ${user.first_name}, ${user.username ?? null})
     RETURNING id
   `;
+  void sendAutoMessage(user.id);
   return inserted[0].id;
 }
 

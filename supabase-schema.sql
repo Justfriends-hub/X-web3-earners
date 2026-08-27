@@ -21,8 +21,12 @@ CREATE TABLE IF NOT EXISTS users (
   last_checkin_date TEXT,
   referrals INTEGER NOT NULL DEFAULT 0,
   referred_by BIGINT,
+  welcome_claimed BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- For existing deployments (run before this file was created):
+ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_claimed BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS tasks (
   id BIGSERIAL PRIMARY KEY,

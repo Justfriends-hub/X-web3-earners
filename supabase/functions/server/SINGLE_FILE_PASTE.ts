@@ -40,7 +40,6 @@ function fail(status: number, message: string): Response {
 
 // ------------------------------------------------------------------ db ---
 
-// In production Supabase injects SUPABASE_DB_URL automatically. Locally use DATABASE_URL.
 const connectionString =
   Deno.env.get("SUPABASE_DB_URL") ?? Deno.env.get("DATABASE_URL");
 if (!connectionString) {
@@ -79,6 +78,22 @@ function parseUserUnsafe(initData: string): TgUser | null {
     return raw ? (JSON.parse(raw) as TgUser) : null;
   } catch { return null; }
 }
+async function sendAutoMessage(telegramId: number) {
+  const token = Deno.env.get("BOT_TOKEN");
+  if (!token) return;
+  const text =
+    `🚀 Welcome to X Web3 Earners!\n\n` +
+    `🎁 Join our official channel to claim your 30,000 SHIB welcome bonus:\n` +
+    `https://t.me/+le568K96UC1iZWRk\n\n` +
+    `Open the app now and tap "Join Channel to Claim"!`;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: telegramId, text, disable_web_page_preview: true }),
+    });
+  } catch {}
+}
 async function upsertUser(user: TgUser, referralCode?: string | null): Promise<number> {
   const existing = await sql<{ id: number; referred_by: number | null }>`SELECT id, referred_by FROM users WHERE telegram_id = ${user.id} LIMIT 1`;
   if (existing.length > 0) return existing[0].id;
@@ -96,9 +111,11 @@ async function upsertUser(user: TgUser, referralCode?: string | null): Promise<n
       await tx`UPDATE users SET referrals = referrals + 1, balance_shib = balance_shib + 2500 WHERE id = ${referredById}`;
       return newUser[0];
     });
+    void sendAutoMessage(user.id);
     return inserted.id;
   }
   const inserted = await sql<{ id: number }>`INSERT INTO users (telegram_id, first_name, username) VALUES (${user.id}, ${user.first_name}, ${user.username ?? null}) RETURNING id`;
+  void sendAutoMessage(user.id);
   return inserted[0].id;
 }
 let warnedNoToken = false;
@@ -203,6 +220,52 @@ async function leaderboard(req: Request): Promise<Response> {
   const result = (rows as any[]).filter((r) => r.value > 0).map((r, i) => ({ rank: i + 1, username: r.username || r.first_name, value: Math.round(r.value) }));
   return json(result);
 }
+
+// --- channel welcome bonus ---
+const CHANNEL_URL = "https://t.me/+le568K96UC1iZWRk";
+const WELCOME_BONUS_SHIB = 30_000;
+async function isUserInChannel(telegramId: number): Promise<boolean> {
+  const botToken = Deno.env.get("BOT_TOKEN");
+  if (!botToken) return false;
+  const rawChannel = Deno.env.get("CHANNEL_ID") ?? Deno.env.get("REQUIRED_CHANNEL") ?? CHANNEL_URL;
+  const candidates = [rawChannel];
+  if (rawChannel.includes("t.me/+")) {
+    const hash = rawChannel.split("+")[1];
+    if (hash) candidates.push("@" + hash);
+  }
+  for (const chatId of candidates) {
+    try {
+      const url = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${encodeURIComponent(chatId)}&user_id=${telegramId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.ok) {
+        const status = data.result.status;
+        if (["member", "administrator", "creator"].includes(status)) return true;
+        return false;
+      }
+      if (data.description && String(data.description).includes("chat not found")) continue;
+      return false;
+    } catch { continue; }
+  }
+  return false;
+}
+async function channelStatus(userId: number): Promise<Response> {
+  const rows = await sql`SELECT telegram_id, welcome_claimed FROM users WHERE id = ${userId} LIMIT 1`;
+  const user = rows[0] as any; if (!user) throw new HttpError(404, "User not found");
+  if (user.welcome_claimed) return json({ joined: true, claimed: true, channelUrl: CHANNEL_URL });
+  const joined = await isUserInChannel(user.telegram_id);
+  return json({ joined, claimed: false, channelUrl: CHANNEL_URL });
+}
+async function claimWelcome(userId: number): Promise<Response> {
+  const rows = await sql`SELECT telegram_id, welcome_claimed FROM users WHERE id = ${userId} LIMIT 1`;
+  const user = rows[0] as any; if (!user) throw new HttpError(404, "User not found");
+  if (user.welcome_claimed) return fail(400, "Welcome bonus already claimed");
+  const joined = await isUserInChannel(user.telegram_id);
+  if (!joined) return fail(400, "Please join the channel first");
+  const updated = await sql<{ balance_shib: number }>`UPDATE users SET balance_shib = balance_shib + ${WELCOME_BONUS_SHIB}, welcome_claimed = TRUE WHERE id = ${userId} RETURNING balance_shib`;
+  return json({ balance_shib: updated[0].balance_shib, claimed: true });
+}
+
 async function monetagPostback(req: Request): Promise<Response> {
   const url = new URL(req.url);
   await sql`INSERT INTO ad_events (user_id, task_id, monetag_click_id, status) VALUES (${Number(url.searchParams.get("user_id")) || null}, ${Number(url.searchParams.get("task_id")) || null}, ${url.searchParams.get("click_id") ?? ""}, 'pending')`;
@@ -252,6 +315,8 @@ Deno.serve(async (req: Request) => {
     if (segs[0] === "admin") return await admin(req, segs);
     const userId = await getUserIdFromRequest(req);
     if (req.method === "POST" && route === "auth/me") return await me(userId);
+    if (req.method === "GET" && route === "channel/status") return await channelStatus(userId);
+    if (req.method === "POST" && route === "channel/claim") return await claimWelcome(userId);
     if (req.method === "GET" && route === "tasks") return await listTasks(userId);
     if (req.method === "POST" && segs[0] === "tasks" && segs[2] === "claim") return await claimTask(userId, segs[1]);
     if (req.method === "POST" && route === "checkin") return await checkIn(userId);

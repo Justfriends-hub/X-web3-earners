@@ -209,6 +209,69 @@ export async function leaderboard(req: Request): Promise<Response> {
   return json(result);
 }
 
+// ------------------------------------------------------------ channel ---
+
+const CHANNEL_URL = "https://t.me/+le568K96UC1iZWRk";
+const WELCOME_BONUS_SHIB = 30_000;
+
+async function isUserInChannel(telegramId: number): Promise<boolean> {
+  const botToken = Deno.env.get("BOT_TOKEN");
+  if (!botToken) return false;
+  // For invite links, Telegram Bot API's getChatMember still works if bot is admin.
+  // Try the invite link directly and a few fallbacks.
+  const rawChannel = Deno.env.get("CHANNEL_ID") ?? Deno.env.get("REQUIRED_CHANNEL") ?? CHANNEL_URL;
+  const candidates = [rawChannel];
+  if (rawChannel.includes("t.me/+")) {
+    const hash = rawChannel.split("+")[1];
+    if (hash) candidates.push(`@` + hash);
+  }
+  for (const chatId of candidates) {
+    try {
+      const url = `https://api.telegram.org/bot${botToken}/getChatMember?chat_id=${encodeURIComponent(chatId)}&user_id=${telegramId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.ok) {
+        const status = data.result.status;
+        if (["member", "administrator", "creator"].includes(status)) return true;
+        return false;
+      }
+      // If private channel and bot not admin, Telegram returns "Bad Request: chat not found" — fall through to next candidate
+      if (data.description && data.description.includes("chat not found")) continue;
+      return false;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
+
+export async function channelStatus(userId: number): Promise<Response> {
+  const rows = await sql`SELECT telegram_id, welcome_claimed FROM users WHERE id = ${userId} LIMIT 1`;
+  const user = rows[0] as any;
+  if (!user) throw new HttpError(404, "User not found");
+  if (user.welcome_claimed) {
+    return json({ joined: true, claimed: true, channelUrl: CHANNEL_URL });
+  }
+  const joined = await isUserInChannel(user.telegram_id);
+  return json({ joined, claimed: false, channelUrl: CHANNEL_URL });
+}
+
+export async function claimWelcome(userId: number): Promise<Response> {
+  const rows = await sql`SELECT telegram_id, welcome_claimed FROM users WHERE id = ${userId} LIMIT 1`;
+  const user = rows[0] as any;
+  if (!user) throw new HttpError(404, "User not found");
+  if (user.welcome_claimed) return fail(400, "Welcome bonus already claimed");
+
+  const joined = await isUserInChannel(user.telegram_id);
+  if (!joined) return fail(400, "Please join the channel first");
+
+  const updated = await sql<{ balance_shib: number }>`
+    UPDATE users SET balance_shib = balance_shib + ${WELCOME_BONUS_SHIB}, welcome_claimed = TRUE
+    WHERE id = ${userId} RETURNING balance_shib
+  `;
+  return json({ balance_shib: updated[0].balance_shib, claimed: true });
+}
+
 // ------------------------------------------------------------ monetag ---
 
 export async function monetagPostback(req: Request): Promise<Response> {

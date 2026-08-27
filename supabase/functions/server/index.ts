@@ -54,6 +54,8 @@ Deno.serve(async (req: Request) => {
     const userId = await getUserIdFromRequest(req);
 
     if (req.method === "POST" && route === "auth/me") return await h.me(userId);
+    if (req.method === "GET" && route === "channel/status") return await h.channelStatus(userId);
+    if (req.method === "POST" && route === "channel/claim") return await h.claimWelcome(userId);
     if (req.method === "GET" && route === "tasks") return await h.listTasks(userId);
     if (req.method === "POST" && segs[0] === "tasks" && segs[2] === "claim") {
       return await h.claimTask(userId, segs[1]);

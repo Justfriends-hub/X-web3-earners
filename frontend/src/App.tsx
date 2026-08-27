@@ -8,7 +8,8 @@ import Refer from "./screens/Refer";
 import Account from "./screens/Account";
 import { api, Me, RateInfo, Task } from "./lib/api";
 import { initTelegram, getTelegramUser, getReferralCode } from "./lib/telegram";
-import { mockMe, mockRate, mockTasks, mockLeaderboard } from "./lib/mockData";
+import { mockMe, mockRate, mockTasks } from "./lib/mockData";
+import WelcomeBonusModal from "./components/WelcomeBonusModal";
 
 const MIN_WITHDRAW_SHIB = 5000; // placeholder threshold — tune once real economics are set
 
@@ -20,6 +21,8 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState<{ rank: number; username: string; value: number }[]>([]);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [usingMock, setUsingMock] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeChecked, setWelcomeChecked] = useState(false);
 
   useEffect(() => {
     initTelegram();
@@ -45,6 +48,13 @@ export default function App() {
       setTasks(taskData);
       setLeaderboard(leaderboardData);
       setUsingMock(false);
+      if (!welcomeChecked) {
+        try {
+          const status = await api.getChannelStatus();
+          if (!status.claimed) setShowWelcome(true);
+          setWelcomeChecked(true);
+        } catch {}
+      }
     } catch {
       // Outside Telegram (or backend down) — show preview data.
       // In production with BOT_TOKEN set, opening outside Telegram always
@@ -159,6 +169,17 @@ export default function App() {
           minWithdrawShib={MIN_WITHDRAW_SHIB}
           onClose={() => setWithdrawOpen(false)}
           onSubmit={handleWithdraw}
+        />
+      )}
+
+      {showWelcome && !usingMock && (
+        <WelcomeBonusModal
+          onJoin={() => {}}
+          onClose={() => setShowWelcome(false)}
+          onClaim={async () => {
+            const res = await api.claimWelcome();
+            setMe((prev) => (prev ? { ...prev, balance_shib: res.balance_shib } : prev));
+          }}
         />
       )}
     </div>
